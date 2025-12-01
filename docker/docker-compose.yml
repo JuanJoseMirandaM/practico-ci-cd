@@ -22,14 +22,5 @@ services:
       - bitcod-net
     depends_on:
       - backend
-  sonarqube:
-    image: sonarqube:latest
-    container_name: sonarqube
-    restart: always
-    ports:
-      - "9000:9000"
-    networks:
-      - bitcod-net
-
 networks:
   bitcod-net:
