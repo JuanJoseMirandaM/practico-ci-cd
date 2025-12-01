@@ -1,14 +1,59 @@
 pipeline {
     agent any
-    
+
     stages {
+
         stage('Clonar repositorio') {
             steps {
                 echo "Descargando aplicación desde GitHub (rama develop)..."
-
                 git branch: 'develop',
                     url: 'https://github.com/JuanJoseMirandaM/practico-ci-cd.git'
             }
+        }
+        
+        stage('Tests Backend') {
+            steps {
+                echo "Ejecutando tests del backend..."
+                dir('backend') {
+                    sh '''
+                        mvn clean test
+                    '''
+                }
+            }
+            post {
+                always {
+                    echo "Publicando reportes de tests del backend..."
+                    junit 'backend/target/surefire-reports/*.xml'
+                }
+            }
+        }
+
+        stage('Construir imágenes Docker') {
+            steps {
+                echo "Construyendo imágenes Docker del backend y frontend..."
+                sh """
+                    docker compose -f docker/docker-compose.yml build
+                """
+            }
+        }
+
+        stage('Levantar servicios') {
+            steps {
+                echo "Levantando servicios con docker compose..."
+                sh """
+                    docker compose -f docker/docker-compose.yml down
+                    docker compose -f docker/docker-compose.yml up -d --force-recreate
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "🚀 Pipeline completado correctamente."
+        }
+        failure {
+            echo "❌ Hubo un error en el pipeline."
         }
     }
 }
