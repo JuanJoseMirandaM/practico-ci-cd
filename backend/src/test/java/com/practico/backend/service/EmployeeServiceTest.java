@@ -60,7 +60,7 @@ class EmployeeServiceTest {
         // Then
         assertNotNull(response);
         assertEquals("employee-id-123", response.getId());
-        assertEquals("Cesar", response.getFirstName());
+        assertEquals("Ceesar", response.getFirstName());
         assertEquals("Vincenti", response.getLastName());
         assertEquals("cesar.vincenti@example.com", response.getEmail());
         assertEquals("70112233", response.getPhone());
