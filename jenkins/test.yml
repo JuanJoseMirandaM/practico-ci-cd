@@ -1,0 +1,125 @@
+pipeline {
+    agent any
+
+    stages {
+
+        stage('Clonar repositorio') {
+            steps {
+                echo "Descargando aplicación desde GitHub (rama feat/test-jenkins)..."
+                git branch: 'feat/test-jenkins',
+                    url: 'https://github.com/JuanJoseMirandaM/practico-ci-cd.git'
+            }
+        }
+
+        stage('Tests Backend') {
+            steps {
+                echo "Ejecutando tests del backend..."
+                dir('backend') {
+                    sh '''
+                        mvn clean test
+                    '''
+                }
+            }
+            post {
+                always {
+                    echo "Publicando reportes de tests del backend..."
+                    junit 'backend/target/surefire-reports/*.xml'
+                }
+            }
+        }
+        
+        stage('Cobertura de Código') {
+            steps {
+                echo "Generando reporte de cobertura de código..."
+                dir('backend') {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh '''
+                            mvn test jacoco:report || true
+                        '''
+                    }
+                }
+            }
+            post {
+                always {
+                    echo "Publicando reporte de cobertura de código..."
+                    script {
+                        try {
+                            publishHTML([
+                                reportDir: 'backend/target/site/jacoco',
+                                reportFiles: 'index.html',
+                                reportName: 'Reporte de Cobertura JaCoCo',
+                                keepAll: true,
+                                alwaysLinkToLastBuild: true
+                            ])
+                        } catch (Exception e) {
+                            echo "Advertencia: No se pudo publicar el reporte de JaCoCo. ${e.getMessage()}"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Análisis SonarQube') {
+            steps {
+                echo "Analizando código con SonarQube para detectar vulnerabilidades..."
+                dir('backend') {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh '''
+                            mvn sonar:sonar \
+                                -Dsonar.projectKey=backend \
+                                -Dsonar.sources=src/main/java \
+                                -Dsonar.tests=src/test/java \
+                                -Dsonar.java.binaries=target/classes \
+                                -Dsonar.java.test.binaries=target/test-classes \
+                                -Dsonar.junit.reportPaths=target/surefire-reports \
+                                -Dsonar.host.url=${SONAR_HOST_URL:-http://localhost:9000} || true
+                        '''
+                    }
+                }
+            }
+            post {
+                always {
+                    echo "Análisis SonarQube completado (puede que SonarQube no esté disponible)"
+                }
+            }
+        }
+
+        stage('Construir imágenes Docker') {
+            steps {
+                echo "Construyendo imágenes Docker del backend y frontend..."
+                sh """
+                    docker compose -f docker/docker-compose.yml build
+                """
+            }
+        }
+
+        stage('Levantar servicios') {
+            steps {
+                echo "Levantando servicios con docker compose..."
+                sh """
+                    docker compose -f docker/docker-compose.yml down
+                    docker compose -f docker/docker-compose.yml up -d --force-recreate
+                """
+            }
+        }
+
+        stage('Verificar servicios') {
+            steps {
+                echo "Verificando que los servicios estén corriendo..."
+                sh """
+                    sleep 10
+                    docker compose -f docker/docker-compose.yml ps
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline completado correctamente."
+        }
+        failure {
+            echo "Hubo un error en el pipeline."
+        }
+    }
+}
